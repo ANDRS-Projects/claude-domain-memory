@@ -67,7 +67,7 @@ Rules carry enforcement weight only when they live in CLAUDE.md, not just in dom
 
 If the markers don't exist yet in CLAUDE.md, append them (and the header from `rules_template.md`) now.
 
-**Rebuild the block** from scratch using the current Rules sections across all `domain_*.md` files:
+**Rebuild the block** from scratch using the Rules sections from this project's `domain_*.md` files only:
 
 ```markdown
 <!-- rules-start -->
@@ -75,8 +75,7 @@ If the markers don't exist yet in CLAUDE.md, append them (and the header from `r
 - <rule>
 - <rule>
 
-## <other_domain>
-- <rule>
+<!-- repeat for each domain_*.md in this project that has rules -->
 <!-- rules-end -->
 ```
 
