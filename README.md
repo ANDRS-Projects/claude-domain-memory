@@ -18,7 +18,7 @@ Each project gets one `domain_*.md` file per knowledge area (e.g. `domain_notion
 - **Hypotheses** — patterns seen but not confirmed; tracked with a confirmation count
 - **Rules** — promoted from hypotheses at 5+ confirmations; demoted back if contradicted
 
-At the end of a session, run `/knowledge-update`. Claude reviews what was worked on and updates the relevant domain files — adding facts, incrementing hypothesis counts, and promoting anything that crossed the threshold.
+At the end of a session, run `/knowledge-update`. Claude reviews what was worked on and updates the relevant domain files — adding facts, incrementing hypothesis counts, and promoting anything that crossed the threshold. Promoted rules are also written into the project's CLAUDE.md so they're treated as binding instructions, not just context.
 
 ## How memory location works
 
@@ -84,6 +84,21 @@ In `~/.claude/projects/<project-slug>/memory/MEMORY.md`, add:
 
 Claude Code auto-loads `MEMORY.md` at session start, so the domain file will be available from then on.
 
+### 4. Add the rules block to CLAUDE.md
+
+In your project root's `CLAUDE.md` (create it if it doesn't exist), add:
+
+```markdown
+## Confirmed Rules
+Rules promoted from domain knowledge — follow by default.
+If a user request conflicts with a rule, flag it rather than silently breaking it.
+
+<!-- rules-start -->
+<!-- rules-end -->
+```
+
+The block between the markers is managed by `/knowledge-update`. Rules are written here automatically on promotion and removed on demotion.
+
 ## Usage
 
 At the end of any session where you learned something non-obvious:
@@ -97,6 +112,7 @@ Claude will:
 2. Extract facts, new hypotheses, and confirmations
 3. Update the relevant `domain_*.md` files
 4. Promote any hypothesis that reached 5+ confirmations to a Rule
+5. Sync all current rules into a managed block in CLAUDE.md, so they're enforced as instructions
 
 ## What to store
 
@@ -114,6 +130,9 @@ Claude will:
 ## File structure
 
 ```
+<project-root>/
+  CLAUDE.md                  ← contains managed rules block (<!-- rules-start/end -->)
+
 ~/.claude/projects/<project-slug>/memory/
   MEMORY.md                  ← index, auto-loaded by Claude Code
   domain_<name>.md           ← one per knowledge domain
@@ -147,6 +166,18 @@ domain: notion_api
 ## Rules
 _(none yet)_
 ```
+
+## Upgrading from an earlier version
+
+Re-run the install command to get the latest skill:
+
+```bash
+cp -r skills/knowledge-update ~/.claude/skills/
+```
+
+If you already have promoted rules in your `domain_*.md` files, they won't appear in CLAUDE.md automatically. The sync only runs during `/knowledge-update`. To backfill, just run `/knowledge-update` at the start of any session — even if nothing new happened. Claude will pick up the existing rules and write the CLAUDE.md block.
+
+You'll also need to add the rules block to your project's CLAUDE.md manually (step 4 of installation above) if it doesn't exist yet — the skill creates the markers if missing, but only when it runs.
 
 ## Domain files are personal
 

@@ -1,6 +1,6 @@
 ---
 name: knowledge-update
-description: Extract domain knowledge from the current session and store it in the project's domain_*.md memory files. Updates facts, adds hypotheses, increments confirmation counts, and promotes hypotheses to rules at 5+ confirmations. Run at the end of a work session.
+description: Extract domain knowledge from the current session and store it in the project's domain_*.md memory files. Updates facts, adds hypotheses, increments confirmation counts, promotes hypotheses to rules at 5+ confirmations, and syncs promoted rules into CLAUDE.md for enforcement. Run at the end of a work session.
 ---
 
 # Knowledge Update
@@ -49,9 +49,39 @@ Review the conversation and identify:
 - Hypothesis with **5+ confirmations** → move to Rules section
 - Rule **contradicted by new data** → move back to Hypotheses with a note explaining what contradicted it
 
-### Step 4 — Update the file(s)
+### Step 4 — Update the domain file(s)
 
 Edit the relevant `domain_*.md` file(s). If creating a new domain file, also add it to `MEMORY.md`.
+
+### Step 5 — Sync rules into CLAUDE.md
+
+Rules carry enforcement weight only when they live in CLAUDE.md, not just in domain files. After any promotion or demotion, rebuild the rules block in the project's CLAUDE.md.
+
+**Locate CLAUDE.md:** Look for it in the project root (not `~/.claude/`). If it doesn't exist yet, create it.
+
+**Find the managed block** — the section between these markers:
+```
+<!-- rules-start -->
+<!-- rules-end -->
+```
+
+If the markers don't exist yet in CLAUDE.md, append them (and the header from `rules_template.md`) now.
+
+**Rebuild the block** from scratch using the Rules sections from this project's `domain_*.md` files only:
+
+```markdown
+<!-- rules-start -->
+## <domain_name>
+- <rule>
+- <rule>
+
+<!-- repeat for each domain_*.md in this project that has rules -->
+<!-- rules-end -->
+```
+
+Only include domains that have at least one rule. Omit domains with no rules. Replace the entire block content — do not append.
+
+If a rule was **demoted** this session, remove it from the block. If a rule was **promoted**, add it.
 
 New domain file template:
 ```markdown
