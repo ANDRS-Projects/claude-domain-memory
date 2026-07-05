@@ -17,11 +17,30 @@ Run at the end of a session with `/knowledge-update` when:
 
 ## How It Works
 
-### Step 1 — Identify the domain
-Look at what was worked on. Map it to an existing domain file or decide if a new one is needed.
+### Step 1 — Locate the memory folder
 
-Existing domain files live in the project memory folder:
-`~/.claude/projects/<project-slug>/memory/domain_*.md`
+Run these two bash checks first — do not skip or infer:
+
+```bash
+test -d .git && echo "git=yes" || echo "git=no"
+test -d .claude/memory && echo "memory=yes" || echo "memory=no"
+```
+
+Decision based on the output:
+
+| git | memory | Action |
+|-----|--------|--------|
+| yes | yes    | Use `.claude/memory/` |
+| yes | no     | Run `mkdir -p .claude/memory/` then use it |
+| no  | —      | Fall back to `~/.claude/projects/<project-slug>/memory/` |
+
+**Do not silently fall back to `~/.claude/projects/` just because `.claude/memory/` hasn't been created yet.** If it's a git repo, create the folder. The `~/.claude/projects/` path is reserved for non-repo contexts only (e.g. a scratch folder with no `.git`).
+
+**If the repo is (or is about to become) public/open-source**, keep using repo-local `.claude/memory/` — don't reroute to `~/.claude/projects/` just because the repo is public. Instead, make sure `.claude/` is listed in `.gitignore` so the memory files stay local-only and never get published. If `.gitignore` exists but doesn't already exclude `.claude/`, add it as part of this step.
+
+### Step 1b — Identify the domain
+
+Look at what was worked on. Map it to an existing domain file in the resolved memory folder, or decide if a new one is needed.
 
 Only create a new domain file if the work clearly belongs to a different domain than existing ones.
 
@@ -51,15 +70,31 @@ Review the conversation and identify:
 
 ### Step 4 — Update the domain file(s)
 
-Edit the relevant `domain_*.md` file(s). If creating a new domain file, also add it to `MEMORY.md`.
+Edit the relevant `domain_*.md` file(s) in the memory folder resolved in Step 1. If creating a new domain file, also add it to `MEMORY.md` in the same folder.
 
 ### Step 5 — Sync rules into CLAUDE.md
 
 Rules carry enforcement weight only when they live in CLAUDE.md, not just in domain files. After any promotion or demotion, rebuild the rules block in the project's CLAUDE.md.
 
-**Locate CLAUDE.md:** Look for it in the project root (not `~/.claude/`). If it doesn't exist yet, create it.
+**Locate CLAUDE.md:** Check BOTH possible locations, not just the first hit:
 
-**Find the managed block** — the section between these markers:
+```bash
+test -f .claude/CLAUDE.md && echo ".claude/CLAUDE.md=yes" || echo ".claude/CLAUDE.md=no"
+test -f CLAUDE.md && echo "CLAUDE.md=yes" || echo "CLAUDE.md=no"
+grep -l "rules-start" .claude/CLAUDE.md CLAUDE.md 2>/dev/null
+```
+
+- Only one exists → use it.
+- Neither exists → create `.claude/CLAUDE.md`.
+- **Both exist** → `.claude/CLAUDE.md` is the canonical one going forward, but do not just overwrite the root file blind. Check whether the root `CLAUDE.md` *also* has a `rules-start`/`rules-end` block:
+  - If it doesn't, nothing to reconcile — proceed normally with `.claude/CLAUDE.md`.
+  - If it does, this is drift (two independently-maintained managed blocks — can happen when a repo's root `CLAUDE.md` predates a later `.claude/` migration). Before touching anything:
+    1. Diff the two blocks. For every rule present in root's block but absent from `.claude/CLAUDE.md`'s block, add it to the matching domain's `## Rules` section in `.claude/memory/domain_*.md` first (create the domain file if it doesn't exist) — do not let a rule disappear just because it lived in the "wrong" file.
+    2. Rebuild `.claude/CLAUDE.md`'s block per the process below, now covering the reconciled rule set.
+    3. Strip the `rules-start`/`rules-end` block out of the root `CLAUDE.md` (keep any surrounding prose), replacing it with a one-line pointer: `` `.claude/CLAUDE.md` — enforced rules synced from domain memory (single source of truth) ``.
+    4. Report the consolidation explicitly to the user (which rules were recovered from root, if any) — do not do this silently.
+
+**Find the managed block** in `.claude/CLAUDE.md` — the section between these markers:
 ```
 <!-- rules-start -->
 <!-- rules-end -->

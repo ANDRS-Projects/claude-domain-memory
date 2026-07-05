@@ -22,29 +22,33 @@ At the end of a session, run `/knowledge-update`. Claude reviews what was worked
 
 ## How memory location works
 
-Domain files are stored per **working directory** — the folder Claude Code was opened from, not the folder containing the files you edited.
+Memory location depends on whether you're working in a git repository.
 
-Claude Code maps your working directory to a project slug by replacing `/` with `-`:
+**Git repos (recommended):** memory lives in the repo itself, under `.claude/memory/`:
+```
+<project-root>/.claude/memory/
+```
+This travels with the repo and stays put regardless of which subdirectory you opened Claude Code from. The skill creates this folder automatically the first time it runs in a repo that doesn't have it yet.
+
+**Non-repo folders:** Claude Code maps your working directory to a project slug by replacing `/` with `-`, and stores memory under your home directory instead:
 ```
 /Users/you/Documents/my-project → -Users-you-Documents-my-project
 ```
-
-Memory for that session goes into:
 ```
 ~/.claude/projects/-Users-you-Documents-my-project/memory/
 ```
 
 **What this means in practice:**
-- If you open Claude Code from `/Users/you/Documents/my-project`, domain files land in that project's memory folder (in .claude/projects/username-path-to-my-project..) and load automatically next time you open from the same directory
-- If you open from a different directory (e.g. your home folder) and edit files in `my-project`, memory goes into the home-level folder (.claude/projects/username) instead — and won't be available when working in `my-project`
-- There is no setting to change this — it is determined by working directory at session start
+- In a git repo, memory always lands in `.claude/memory/` at the repo root — consistent no matter where inside the repo you opened Claude Code from
+- Outside a git repo, memory is keyed to the exact working directory Claude Code was opened from at session start; open from a different directory (e.g. your home folder) and memory goes into a different, unrelated folder
+- There is no setting to change the non-repo behavior — it's determined by working directory at session start
 
-**Memory is never stored in your project folder by Claude design.** Claude Code stores all memory under `~/.claude/projects/<slug>/memory/` — completely separate from your code. Your project folder stays clean. The slug is Claude's internal mapping of your working directory path.
+**Keeping memory out of a public repo:** if your repo is or will become public/open-source, keep memory in `.claude/memory/` rather than rerouting to `~/.claude/projects/` — just add `.claude/` to `.gitignore` so the memory files stay local-only and never get published.
 
-**If your domain files landed in the wrong place**, move them manually:
+**If your domain files landed in the wrong place** (e.g. you started outside a repo and later ran `git init`), move them manually:
 ```bash
-mv ~/.claude/projects/<wrong-slug>/memory/domain_*.md \
-   ~/.claude/projects/<correct-slug>/memory/
+mkdir -p .claude/memory
+mv ~/.claude/projects/<old-slug>/memory/domain_*.md .claude/memory/
 ```
 
 ## Installation
@@ -61,12 +65,18 @@ The `/knowledge-update` command is now available in Claude Code.
 
 ### 2. Set up domain files for a project
 
-Copy the template into your project's memory folder:
+**If your project is a git repo:**
+```bash
+mkdir -p .claude/memory
+cp templates/domain_template.md .claude/memory/domain_<name>.md
+```
 
+**If it isn't a git repo:**
 ```bash
 # Find your project slug (it mirrors the path with slashes replaced by hyphens)
 # e.g. /Users/you/Documents/my-project → -Users-you-Documents-my-project
 
+mkdir -p ~/.claude/projects/<project-slug>/memory
 cp templates/domain_template.md \
   ~/.claude/projects/<project-slug>/memory/domain_<name>.md
 ```
@@ -75,7 +85,7 @@ Edit the frontmatter and rename `<name>` to match the domain (e.g. `notion_api`,
 
 ### 3. Add it to MEMORY.md
 
-In `~/.claude/projects/<project-slug>/memory/MEMORY.md`, add:
+In `MEMORY.md` in the same memory folder from step 2 (`.claude/memory/MEMORY.md` for a git repo, or `~/.claude/projects/<project-slug>/memory/MEMORY.md` otherwise), add:
 
 ```markdown
 ## Domain Knowledge
@@ -86,7 +96,7 @@ Claude Code auto-loads `MEMORY.md` at session start, so the domain file will be 
 
 ### 4. Add the rules block to CLAUDE.md
 
-In your project root's `CLAUDE.md` (create it if it doesn't exist), add:
+The skill looks for `.claude/CLAUDE.md` first, then falls back to a `CLAUDE.md` in your project root. Create whichever one your project uses (if neither exists yet, create `.claude/CLAUDE.md`), and add:
 
 ```markdown
 ## Confirmed Rules
@@ -97,7 +107,7 @@ If a user request conflicts with a rule, flag it rather than silently breaking i
 <!-- rules-end -->
 ```
 
-The block between the markers is managed by `/knowledge-update`. Rules are written here automatically on promotion and removed on demotion.
+The block between the markers is managed by `/knowledge-update`. Rules are written here automatically on promotion and removed on demotion. If both `.claude/CLAUDE.md` and a root `CLAUDE.md` ever end up with this block (e.g. after restructuring a project), the skill treats `.claude/CLAUDE.md` as the single source of truth and folds the other one back into it — but it's simplest to only ever create one.
 
 ## Usage
 
@@ -108,11 +118,12 @@ At the end of any session where you learned something non-obvious:
 ```
 
 Claude will:
-1. Identify which domain(s) the session touched
-2. Extract facts, new hypotheses, and confirmations
-3. Update the relevant `domain_*.md` files
-4. Promote any hypothesis that reached 5+ confirmations to a Rule
-5. Sync all current rules into a managed block in CLAUDE.md, so they're enforced as instructions
+1. Locate the right memory folder (repo-local `.claude/memory/` for git repos, `~/.claude/projects/<slug>/memory/` otherwise)
+2. Identify which domain(s) the session touched
+3. Extract facts, new hypotheses, and confirmations
+4. Update the relevant `domain_*.md` files
+5. Promote any hypothesis that reached 5+ confirmations to a Rule
+6. Sync all current rules into a managed block in CLAUDE.md, so they're enforced as instructions
 
 ## What to store
 
@@ -129,6 +140,18 @@ Claude will:
 
 ## File structure
 
+**Git repo:**
+```
+<project-root>/
+  .claude/
+    CLAUDE.md                ← contains managed rules block (<!-- rules-start/end -->)
+    memory/
+      MEMORY.md              ← index, auto-loaded by Claude Code
+      domain_<name>.md       ← one per knowledge domain
+      domain_<other>.md
+```
+
+**Non-repo folder:**
 ```
 <project-root>/
   CLAUDE.md                  ← contains managed rules block (<!-- rules-start/end -->)
@@ -177,7 +200,13 @@ cp -r skills/knowledge-update ~/.claude/skills/
 
 If you already have promoted rules in your `domain_*.md` files, they won't appear in CLAUDE.md automatically. The sync only runs during `/knowledge-update`. To backfill, just run `/knowledge-update` at the start of any session — even if nothing new happened. Claude will pick up the existing rules and write the CLAUDE.md block.
 
-You'll also need to add the rules block to your project's CLAUDE.md manually (step 4 of installation above) if it doesn't exist yet — the skill creates the markers if missing, but only when it runs.
+You'll also need to add the rules block to your project's `.claude/CLAUDE.md` (preferred) or root `CLAUDE.md` manually (step 4 of installation above) if it doesn't exist yet — the skill creates the markers if missing, but only when it runs.
+
+**Upgrading from a version that stored memory under `~/.claude/projects/<slug>/memory/` for a git repo:** move your domain files into the repo instead so they follow the new git-repo behavior:
+```bash
+mkdir -p .claude/memory
+mv ~/.claude/projects/<old-slug>/memory/*.md .claude/memory/
+```
 
 ## Domain files are personal
 
